@@ -19,16 +19,28 @@
 DoubleResetDetector drd(DRD_TIMEOUT, DRD_ADDRESS);
 
 WebThingAdapter *adapter;
+const char *deviceTypes[] = {"CapacitivieSoilMoistureSensor", "SoilMoistureSensor", "Sensor", nullptr};
+ThingDevice soilMoistureSensor("SoildMoisture-Plant-1", "Soil Moisture Sensor", deviceTypes);
+ThingProperty soilMoistureProperty("moisture", "Soil Moisture", NUMBER, "SoilMoistureCalibrated");
+ThingProperty soilMoistureReadingProperty("moistureReading", "Soil Moisture Reading", NUMBER, "SoilMoistureReading");
 
 //Setup configuration portal on demand
-void startConfigPortalOnDemand(const char *apName);
+void startConfigPortal(const char *apName, AsyncWiFiManager *manager);
 void configModeCallback(AsyncWiFiManager *myWiFiManager);
+void setupThings();
+void updateThings();
+
+struct SoilMoistureSensorResult
+{
+    long moisture;
+    int moistureReading;
+};
 
 //Read Soil moisture Reading
-int readSoilMoisture();
+SoilMoistureSensorResult readSoilMoisture();
 
 int sensor_pin = 0;
-int output_value;
+int moistureReading;
 
 AsyncWebServer server(80);
 DNSServer dns;
@@ -37,6 +49,8 @@ void setup()
 {
 
     Serial.begin(115200);
+    AsyncWiFiManager wifiManager(&server, &dns);
+    wifiManager.setDebugOutput(true);
 
     String apNameStr = "SM-ESP-" + String(ESP.getChipId());
     const char *apName = apNameStr.c_str();
@@ -44,26 +58,59 @@ void setup()
     {
         Serial.println("Starting setup mode using AP: ");
         Serial.print(apName);
-
-        startConfigPortalOnDemand(apName);
+        startConfigPortal(apNameStr.c_str(), &wifiManager);
     }
-    else
+
+    if (wifiManager.autoConnect(apName))
     {
-        AsyncWiFiManager wifiManager(&server, &dns);
-        wifiManager.autoConnect(apName);        
+        delay(5000);
+        setupThings();
     }
 }
 
 void loop()
 {
+    updateThings();
+    delay(60000);
+}
 
-    int moisture = readSoilMoisture();
+void setupThings()
+{
+    Serial.println("Setting up things adapter");
+    adapter = new WebThingAdapter("w25", WiFi.localIP());
+    soilMoistureSensor.addProperty(&soilMoistureProperty);
+    soilMoistureSensor.addProperty(&soilMoistureReadingProperty);
+    adapter->addDevice(&soilMoistureSensor);
+    adapter->begin();
+
+    Serial.println("Moisture sensor server started");
+    Serial.print("http://");
+    Serial.print(WiFi.localIP());
+    Serial.print("/things/");
+    Serial.println(soilMoistureSensor.id);
+}
+
+void updateThings()
+{
+    Serial.println("Updatig thing properties...");
+
+    SoilMoistureSensorResult result = readSoilMoisture();
 
     Serial.println("Moisture Reading: ");
-    Serial.print(output_value);
-    Serial.println("Moisture %: ");
-    Serial.print(moisture);
+    Serial.print(result.moistureReading);
+    Serial.println("\nMoisture %: ");
+    Serial.print(result.moisture);
 
+    ThingPropertyValue soilMoistureValue;
+    ThingPropertyValue soilMoistureReadingValue;
+
+    soilMoistureValue.number = result.moisture;
+    soilMoistureReadingValue.number = result.moistureReading;
+
+    soilMoistureProperty.setValue(soilMoistureValue);
+    soilMoistureReadingProperty.setValue(soilMoistureReadingValue);
+
+    adapter->update();
     Serial.print("\n");
     delay(1000);
 }
@@ -75,18 +122,23 @@ void configModeCallback(AsyncWiFiManager *wiFiManager)
     Serial.println(WiFi.softAPIP());
     //if you used auto generated SSID, print it
     Serial.println(wiFiManager->getConfigPortalSSID());
+
+    // We don't want the next time the boar resets to be considered a double reset
+    // so we remove the flag
+    drd.stop();
 }
 
-void startConfigPortalOnDemand(const char *apName)
+void startConfigPortal(const char *apName, AsyncWiFiManager *manager)
 {
     //WiFiManager
     //Local intialization. Once its business is done, there is no need to keep it around
     AsyncWiFiManager wifiManager(&server, &dns);
+    wifiManager.setDebugOutput(true);
 
     wifiManager.setAPCallback(configModeCallback);
 
     //exit after config instead of connecting
-    wifiManager.setBreakAfterConfig(true);
+    // wifiManager.setBreakAfterConfig(true);
 
     //reset settings - for testing
     //wifiManager.resetSettings();
@@ -94,7 +146,7 @@ void startConfigPortalOnDemand(const char *apName)
     //sets timeout until configuration portal gets turned off
     //useful to make it all retry or go to sleep
     //in seconds
-    //wifiManager.setTimeout(300);
+    wifiManager.setTimeout(300);
 
     //it starts an access point with the specified name
     //here  "AutoConnectAP"
@@ -112,14 +164,26 @@ void startConfigPortalOnDemand(const char *apName)
         delay(5000);
     }
 
-    //if you get here you have connected to the WiFi
-    Serial.println("connected...yeey :)");
+    if (WiFi.reconnect())
+    {
+        //if you get here you have connected to the WiFi
+        Serial.println("connected...yeey :)");
+    }
+    drd.stop();
 }
 
-int readSoilMoisture()
+SoilMoistureSensorResult readSoilMoisture()
 {
-    output_value = analogRead(sensor_pin);
-    long moisture = map(output_value, 800, 350, 0, 100);
+    Serial.println("Getting soild moisture reading...");
+    moistureReading = analogRead(sensor_pin);
+    Serial.println("Soil moisture reading: ");
+    Serial.print(moistureReading);
+    long moisture = map(moistureReading, 800, 350, 0, 100);
+    Serial.println("Soil moisture mapped: ");
+    Serial.print(moisture);
+
+    SoilMoistureSensorResult result = {.moisture = moisture, .moistureReading = moistureReading};
+    return result;
 }
 
 // int output_value;

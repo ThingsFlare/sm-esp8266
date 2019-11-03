@@ -6,6 +6,7 @@
                 "/home/srinath/.arduino15/packages/esp8266/tools/**",
                 "/home/srinath/.arduino15/packages/esp8266/hardware/esp8266/2.5.2/**",
                 "/home/srinath/Arduino/libraries/ESPAsyncWiFiManager",
+                "/home/srinath/Arduino/libraries/ESPAsyncWebServer/src",
                 "/home/srinath/Arduino/libraries/DoubleResetDetector/src",
                 "/home/srinath/Arduino/libraries/webthing-arduino"
             ],
