@@ -42,13 +42,12 @@ SoilMoistureSensorResult readSoilMoisture();
 int sensor_pin = 0;
 int moistureReading;
 
-AsyncWebServer server(80);
-DNSServer dns;
-
 void setup()
 {
 
     Serial.begin(115200);
+    AsyncWebServer server(80);
+    DNSServer dns;
     AsyncWiFiManager wifiManager(&server, &dns);
     wifiManager.setDebugOutput(true);
 
@@ -66,6 +65,11 @@ void setup()
         delay(5000);
         setupThings();
     }
+    drd.stop();
+
+    // updateThings();
+    // delay(60000);
+    // ESP.deepSleep(60 * 1000000);
 }
 
 void loop()
@@ -77,7 +81,8 @@ void loop()
 void setupThings()
 {
     Serial.println("Setting up things adapter");
-    adapter = new WebThingAdapter("w25", WiFi.localIP());
+    String thingName = "SM-ESP-" + String(ESP.getChipId());
+    adapter = new WebThingAdapter(thingName, WiFi.localIP());
     soilMoistureSensor.addProperty(&soilMoistureProperty);
     soilMoistureSensor.addProperty(&soilMoistureReadingProperty);
     adapter->addDevice(&soilMoistureSensor);
@@ -128,25 +133,24 @@ void configModeCallback(AsyncWiFiManager *wiFiManager)
     drd.stop();
 }
 
-void startConfigPortal(const char *apName, AsyncWiFiManager *manager)
+void startConfigPortal(const char *apName, AsyncWiFiManager *wifiManager)
 {
     //WiFiManager
     //Local intialization. Once its business is done, there is no need to keep it around
-    AsyncWiFiManager wifiManager(&server, &dns);
-    wifiManager.setDebugOutput(true);
+    wifiManager->setDebugOutput(true);
 
-    wifiManager.setAPCallback(configModeCallback);
+    wifiManager->setAPCallback(configModeCallback);
 
     //exit after config instead of connecting
     // wifiManager.setBreakAfterConfig(true);
 
     //reset settings - for testing
-    //wifiManager.resetSettings();
+    wifiManager->resetSettings();
 
     //sets timeout until configuration portal gets turned off
     //useful to make it all retry or go to sleep
     //in seconds
-    wifiManager.setTimeout(300);
+    wifiManager->setTimeout(300);
 
     //it starts an access point with the specified name
     //here  "AutoConnectAP"
@@ -155,7 +159,7 @@ void startConfigPortal(const char *apName, AsyncWiFiManager *manager)
     //WITHOUT THIS THE AP DOES NOT SEEM TO WORK PROPERLY WITH SDK 1.5 , update to at least 1.5.1
     //WiFi.mode(WIFI_STA);
 
-    if (!wifiManager.startConfigPortal(apName))
+    if (!wifiManager->startConfigPortal(apName))
     {
         Serial.println("failed to connect and hit timeout");
         delay(3000);
