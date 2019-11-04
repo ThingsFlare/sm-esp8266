@@ -20,7 +20,7 @@ DoubleResetDetector drd(DRD_TIMEOUT, DRD_ADDRESS);
 
 WebThingAdapter *adapter;
 const char *deviceTypes[] = {"CapacitivieSoilMoistureSensor", "SoilMoistureSensor", "Sensor", nullptr};
-ThingDevice soilMoistureSensor("SoildMoisture-Plant-1", "Soil Moisture Sensor", deviceTypes);
+ThingDevice soilMoistureSensor("Soil-Moisture-Plant-1", "Soil Moisture Sensor", deviceTypes);
 ThingProperty soilMoistureProperty("moisture", "Soil Moisture", NUMBER, "SoilMoistureCalibrated");
 ThingProperty soilMoistureReadingProperty("moistureReading", "Soil Moisture Reading", NUMBER, "SoilMoistureReading");
 
@@ -66,22 +66,22 @@ void setup()
         setupThings();
     }
     drd.stop();
-
-    // updateThings();
-    // delay(60000);
-    // ESP.deepSleep(60 * 1000000);
 }
 
 void loop()
 {
+    Serial.println("Pushing readings...");
     updateThings();
     delay(60000);
+    Serial.println("Going into deep sleep mode");
+    ESP.deepSleep(300e6);
 }
 
 void setupThings()
 {
     Serial.println("Setting up things adapter");
     String thingName = "SM-ESP-" + String(ESP.getChipId());
+
     adapter = new WebThingAdapter(thingName, WiFi.localIP());
     soilMoistureSensor.addProperty(&soilMoistureProperty);
     soilMoistureSensor.addProperty(&soilMoistureReadingProperty);
@@ -91,6 +91,13 @@ void setupThings()
     Serial.println("Moisture sensor server started");
     Serial.print("http://");
     Serial.print(WiFi.localIP());
+    Serial.print("/things/");
+
+    Serial.println(soilMoistureSensor.id);
+
+    Serial.println("");
+    Serial.print("http://");
+    Serial.print(thingName);
     Serial.print("/things/");
     Serial.println(soilMoistureSensor.id);
 }
@@ -178,7 +185,7 @@ void startConfigPortal(const char *apName, AsyncWiFiManager *wifiManager)
 
 SoilMoistureSensorResult readSoilMoisture()
 {
-    Serial.println("Getting soild moisture reading...");
+    Serial.println("Getting soil moisture reading...");
     moistureReading = analogRead(sensor_pin);
     Serial.println("Soil moisture reading: ");
     Serial.print(moistureReading);
