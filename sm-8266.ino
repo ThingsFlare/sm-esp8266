@@ -5,9 +5,9 @@
 #include <DNSServer.h>
 // #include <ESPAsyncWebServer.h>
 #include <ESPAsyncWiFiManager.h>
-#include <Thing.h>
-#include <WebThingAdapter.h>
 #include <DoubleResetDetector.h>
+#include <ThingsBoard.h>
+#include <ArduinoJson.h>
 
 // Number of seconds after reset during which a
 // subseqent reset will be considered a double reset.
@@ -16,19 +16,20 @@
 // RTC Memory Address for the DoubleResetDetector to use
 #define DRD_ADDRESS 0
 
+#define TOKEN "CzSaAp0tAeHubXb4YPeP"
+
+char thingsboardServer[] = "thingsflare.com";
+
 DoubleResetDetector drd(DRD_TIMEOUT, DRD_ADDRESS);
 
-WebThingAdapter *adapter;
-const char *deviceTypes[] = {"CapacitivieSoilMoistureSensor", "SoilMoistureSensor", "Sensor", nullptr};
-ThingDevice soilMoistureSensor("Soil-Moisture-Plant-1", "Soil Moisture Sensor", deviceTypes);
-ThingProperty soilMoistureProperty("moisture", "Soil Moisture", NUMBER, "SoilMoistureCalibrated");
-ThingProperty soilMoistureReadingProperty("moistureReading", "Soil Moisture Reading", NUMBER, "SoilMoistureReading");
+WiFiClient wifiClient;
 
 //Setup configuration portal on demand
 void startConfigPortal(const char *apName, AsyncWiFiManager *manager);
 void configModeCallback(AsyncWiFiManager *myWiFiManager);
-void setupThings();
+boolean setupThings();
 void updateThings();
+boolean reconnect();
 
 struct SoilMoistureSensorResult
 {
@@ -36,11 +37,22 @@ struct SoilMoistureSensorResult
     int moistureReading;
 };
 
+class CustomLogger
+{
+public:
+    static void log(const char *error)
+    {
+        Serial.print("[Custom Logger] ");
+        Serial.println(error);
+    }
+};
+
+ThingsBoardSized<128, 32, CustomLogger> tbClient(wifiClient);
+
 //Read Soil moisture Reading
 SoilMoistureSensorResult readSoilMoisture();
 
 int sensor_pin = 0;
-int moistureReading;
 
 void setup()
 {
@@ -63,7 +75,16 @@ void setup()
     if (wifiManager.autoConnect(apName))
     {
         delay(5000);
-        setupThings();
+        if (!reconnect())
+        {
+            Serial.println("Connection to thingsboard failed...");
+            ESP.restart();
+        }
+        if (!setupThings())
+        {
+            Serial.println("Setting up things failed");
+            ESP.restart();
+        }
     }
     drd.stop();
 }
@@ -72,40 +93,50 @@ void loop()
 {
     Serial.println("Pushing readings...");
     updateThings();
-    delay(60000);
     Serial.println("Going into deep sleep mode");
     ESP.deepSleep(300e6);
 }
 
-void setupThings()
+boolean reconnect()
+{
+    // Loop until we're reconnected
+    while (!tbClient.connected())
+    {
+        //tbClient.setServer(thingsboardServer, 1883);
+        Serial.print("Connecting to ThingsBoard node ...");
+        if (tbClient.connect(thingsboardServer, TOKEN, 1883))
+        {
+            Serial.println("[DONE]");
+            // break;
+        }
+        else
+        {
+            Serial.print("[FAILED] to connect to thingsboard node");
+            Serial.println(" : retrying in 5 seconds]");
+            // Wait 5 seconds before retrying
+            delay(5000);
+        }
+    }
+    return true;
+}
+
+boolean setupThings()
 {
     Serial.println("Setting up things adapter");
     String thingName = "SM-ESP-" + String(ESP.getChipId());
+    DynamicJsonDocument attributes(256);
 
-    adapter = new WebThingAdapter(thingName, WiFi.localIP());
-    soilMoistureSensor.addProperty(&soilMoistureProperty);
-    soilMoistureSensor.addProperty(&soilMoistureReadingProperty);
-    adapter->addDevice(&soilMoistureSensor);
-    adapter->begin();
+    attributes["name"] = thingName;
+    attributes["fromDevice"] = true;
 
-    Serial.println("Moisture sensor server started");
-    Serial.print("http://");
-    Serial.print(WiFi.localIP());
-    Serial.print("/things/");
-
-    Serial.println(soilMoistureSensor.id);
-
-    Serial.println("");
-    Serial.print("http://");
-    Serial.print(thingName);
-    Serial.print("/things/");
-    Serial.println(soilMoistureSensor.id);
+    String attributesJSON;
+    serializeJson(attributes, attributesJSON);
+    tbClient.sendAttributeJSON(attributesJSON.c_str());
+    return true;
 }
 
 void updateThings()
 {
-    Serial.println("Updatig thing properties...");
-
     SoilMoistureSensorResult result = readSoilMoisture();
 
     Serial.println("Moisture Reading: ");
@@ -113,17 +144,16 @@ void updateThings()
     Serial.println("\nMoisture %: ");
     Serial.print(result.moisture);
 
-    ThingPropertyValue soilMoistureValue;
-    ThingPropertyValue soilMoistureReadingValue;
+    DynamicJsonDocument telemetry(256);
 
-    soilMoistureValue.number = result.moisture;
-    soilMoistureReadingValue.number = result.moistureReading;
+    telemetry["moisture"] = result.moisture;
+    telemetry["moistureReading"] = result.moistureReading;
+    String telemetryJSON;
+    serializeJson(telemetry, telemetryJSON);
 
-    soilMoistureProperty.setValue(soilMoistureValue);
-    soilMoistureReadingProperty.setValue(soilMoistureReadingValue);
+    
+    tbClient.sendTelemetryJson(telemetryJSON.c_str());
 
-    adapter->update();
-    Serial.print("\n");
     delay(1000);
 }
 
@@ -186,7 +216,7 @@ void startConfigPortal(const char *apName, AsyncWiFiManager *wifiManager)
 SoilMoistureSensorResult readSoilMoisture()
 {
     Serial.println("Getting soil moisture reading...");
-    moistureReading = analogRead(sensor_pin);
+    int moistureReading = analogRead(sensor_pin);
     Serial.println("Soil moisture reading: ");
     Serial.print(moistureReading);
     long moisture = map(moistureReading, 800, 350, 0, 100);
@@ -196,19 +226,3 @@ SoilMoistureSensorResult readSoilMoisture()
     SoilMoistureSensorResult result = {.moisture = moisture, .moistureReading = moistureReading};
     return result;
 }
-
-// int output_value;
-// void setup()
-// {
-//     Serial.begin(115200);
-//     Serial.println("Reading From the Sensor ...");
-//     delay(2000);
-// }
-// void loop()
-// {
-//     output_value = analogRead(sensor_pin);
-//     Serial.print("Moisture : ");
-//     Serial.print(output_value);
-//     Serial.print("\n");
-//     delay(1000);
-// }

@@ -8,7 +8,10 @@
                 "/home/srinath/Arduino/libraries/ESPAsyncWiFiManager",
                 "/home/srinath/Arduino/libraries/ESPAsyncWebServer/src",
                 "/home/srinath/Arduino/libraries/DoubleResetDetector/src",
-                "/home/srinath/Arduino/libraries/webthing-arduino"
+                "/home/srinath/Arduino/libraries/ArduinoJson/src",
+                "/home/srinath/Arduino/libraries/PubSubClient/src",
+                "/home/srinath/Arduino/libraries/ArduinoHttpClient/src",
+                "/home/srinath/Arduino/libraries/ThingsBoard/src"
             ],
             "forcedInclude": [],
             "intelliSenseMode": "gcc-x64",
