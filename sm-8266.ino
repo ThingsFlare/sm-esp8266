@@ -16,9 +16,9 @@
 // RTC Memory Address for the DoubleResetDetector to use
 #define DRD_ADDRESS 0
 
-#define TOKEN "CzSaAp0tAeHubXb4YPeP"
+#define TOKEN ""
 
-char thingsboardServer[] = "thingsflare.com";
+char thingsboardServer[] = "";
 
 DoubleResetDetector drd(DRD_TIMEOUT, DRD_ADDRESS);
 
