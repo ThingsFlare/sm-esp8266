@@ -12,5 +12,5 @@ Soil Moisture Sensor firmware for ESP8266 and Thingsboard
 - [x] Make SSID configuration through AP mode using built-in reset button
 - [ ] Make deep sleep time and telemetry push interval configurable
 - [ ] Add things board host and access token to be configurable
-- [ ] Auto register device with things board through configuratuion mode
+- [ ] Auto register device with things board through configuration mode
 - [ ] Cleanup code
